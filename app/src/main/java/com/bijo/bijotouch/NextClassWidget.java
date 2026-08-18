@@ -13,9 +13,11 @@ import android.widget.RemoteViews;
 import java.util.Calendar;
 
 /**
- * Home-screen widget: the class on right now (or next), room called out large,
- * plus the nearest deadline. Repaints itself on the timetable's own transition
- * points so it flips to the next class ~5 minutes before the current one ends.
+ * Home-screen widget. Four looks: ONGOING (green, with a progress bar), NEXT
+ * (coral - the upcoming class), DONE (blue - day over, tomorrow previewed), and
+ * WEEKEND (violet - a motivational sign-off). It repaints itself on the
+ * timetable's own transition points, and every ~10 min while a class is running
+ * so the progress bar keeps moving.
  */
 public class NextClassWidget extends AppWidgetProvider {
 
@@ -66,93 +68,65 @@ public class NextClassWidget extends AppWidgetProvider {
         }
     }
 
-    /**
-     * Wake up at the next class transition (a start, or an end), so the flip is
-     * on time - with a 20-minute safety net in case a slot boundary is far off
-     * or the day is over.
-     */
-    private void scheduleTick(Context ctx) {
-        AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
-        if (am == null) {
-            return;
-        }
-
-        Calendar when = Calendar.getInstance();
-        int transition = Timetable.nextTransitionToday(ctx);
-        int now = Timetable.nowMinutes();
-
-        boolean atBoundary = transition > now;
-        if (atBoundary) {
-            when.set(Calendar.HOUR_OF_DAY, transition / 60);
-            when.set(Calendar.MINUTE, transition % 60);
-            when.set(Calendar.SECOND, 1);
-            when.set(Calendar.MILLISECOND, 0);
-        } else {
-            when.add(Calendar.MINUTE, 20); // nothing left today - just idle-check
-        }
-
-        long at = when.getTimeInMillis();
-        PendingIntent pi = tickIntent(ctx);
-
-        // A class boundary must fire on the dot, so the widget flips the second
-        // the class ends - not whenever the OS feels like batching an inexact
-        // alarm. Fall back to inexact only if exact alarms aren't permitted.
-        if (atBoundary && canExact(am)) {
-            try {
-                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
-                return;
-            } catch (SecurityException ignored) {
-                // permission pulled at runtime - drop to the inexact path
-            }
-        }
-        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
-    }
-
-    private boolean canExact(AlarmManager am) {
-        if (android.os.Build.VERSION.SDK_INT >= 31) {
-            return am.canScheduleExactAlarms();
-        }
-        return true;
-    }
-
-    private PendingIntent tickIntent(Context ctx) {
-        Intent i = new Intent(ctx, NextClassWidget.class);
-        i.setAction(ACTION_TICK);
-        return PendingIntent.getBroadcast(ctx, 0, i,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-    }
+    // ------------------------------------------------------------- rendering ---
 
     private RemoteViews build(Context ctx) {
         RemoteViews v = new RemoteViews(ctx.getPackageName(), R.layout.widget_next);
         Timetable.Status st = Timetable.status(ctx);
 
+        int bg;
         String kicker, room, detail, time;
-        if (st.current != null) {
-            kicker = "NOW";
-            room = st.current.room;
-            detail = st.current.course + " · " + st.current.type;
-            time = st.current.time();
-        } else if (st.next != null && st.nextDay == 0) {
-            kicker = "NEXT" + away(st.next);
-            room = st.next.room;
-            detail = st.next.course + " · " + st.next.type;
-            time = st.next.time();
-        } else if (st.next != null) {
-            kicker = "NEXT · " + Timetable.DAY_NAMES[st.nextDay - 1].toUpperCase();
-            room = st.next.room;
-            detail = st.next.course + " · " + st.next.type;
-            time = st.next.time();
-        } else {
-            kicker = "DONE";
-            room = "—";
-            detail = "No more classes";
-            time = "Enjoy the break";
+        boolean progress = false;
+
+        switch (st.state) {
+            case ONGOING:
+                bg = R.drawable.widget_bg_ongoing;
+                kicker = "● ONGOING";
+                room = st.slot.room;
+                detail = st.slot.course + " · " + st.slot.type;
+                time = st.slot.time();
+                progress = true;
+                v.setProgressBar(R.id.w_progress, 100, st.progressPct, false);
+                break;
+            case NEXT:
+                bg = R.drawable.widget_bg_next;
+                kicker = "NEXT" + ((st.minsToStart > 0 && st.minsToStart <= 600)
+                        ? " · in " + Ttime.durHuman(st.minsToStart) : "");
+                room = st.slot.room;
+                detail = st.slot.course + " · " + st.slot.type;
+                time = st.slot.time();
+                break;
+            case DONE_TODAY:
+                bg = R.drawable.widget_bg_done;
+                kicker = "DONE FOR TODAY";
+                room = "That's a wrap ✌️";
+                detail = "See you " + Timetable.DAY_NAMES[st.nextDay - 1];
+                time = "First up " + st.slot.room + " · "
+                        + Ttime.hhmm(st.slot.startMin) + " " + Ttime.period(st.slot.startMin);
+                break;
+            case WEEKEND:
+                bg = R.drawable.widget_bg_weekend;
+                kicker = "WEEKEND";
+                room = "Weekend plans?? 🎉";
+                detail = Motivation.line();
+                time = "";
+                break;
+            default: // EMPTY
+                bg = R.drawable.widget_bg_empty;
+                kicker = "NO CLASSES YET";
+                room = "Add your week";
+                detail = "Open the app → + Add class";
+                time = "";
+                break;
         }
 
+        v.setInt(R.id.w_root, "setBackgroundResource", bg);
         v.setTextViewText(R.id.w_kicker, kicker);
         v.setTextViewText(R.id.w_room, room);
         v.setTextViewText(R.id.w_detail, detail);
         v.setTextViewText(R.id.w_time, time);
+        v.setViewVisibility(R.id.w_time, time.isEmpty() ? View.GONE : View.VISIBLE);
+        v.setViewVisibility(R.id.w_progress, progress ? View.VISIBLE : View.GONE);
 
         // Nearest deadline as a chip, if any.
         Event e = Timetable.nextEvent(ctx);
@@ -170,13 +144,70 @@ public class NextClassWidget extends AppWidgetProvider {
         return v;
     }
 
-    private String away(Slot next) {
-        int diff = next.startMin - Timetable.nowMinutes();
-        if (diff <= 0 || diff > 600) {
-            return "";
+    // -------------------------------------------------------------- timing ---
+
+    /**
+     * Wake at the next class transition; while a class is ongoing, also at least
+     * every ~10 min so the progress bar advances. A 20-minute idle fallback
+     * covers the times nothing is scheduled.
+     */
+    private void scheduleTick(Context ctx) {
+        AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
+        if (am == null) {
+            return;
         }
-        int h = diff / 60;
-        int m = diff % 60;
-        return h > 0 ? " · in " + h + "h " + m + "m" : " · in " + m + "m";
+
+        int now = Timetable.nowMinutes();
+        int transition = Timetable.nextTransitionToday(ctx);
+        boolean ongoing = Timetable.status(ctx).state == Timetable.State.ONGOING;
+
+        int target;
+        if (ongoing) {
+            int soon = now + 10;
+            target = (transition > now) ? Math.min(transition, soon) : soon;
+        } else if (transition > now) {
+            target = transition;
+        } else {
+            target = -1;
+        }
+
+        Calendar when = Calendar.getInstance();
+        boolean exact;
+        if (target > now) {
+            when.set(Calendar.HOUR_OF_DAY, target / 60);
+            when.set(Calendar.MINUTE, target % 60);
+            when.set(Calendar.SECOND, 1);
+            when.set(Calendar.MILLISECOND, 0);
+            exact = target == transition; // a real boundary fires on the dot
+        } else {
+            when.add(Calendar.MINUTE, 20);
+            exact = false;
+        }
+
+        long at = when.getTimeInMillis();
+        PendingIntent pi = tickIntent(ctx);
+        if (exact && canExact(am)) {
+            try {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
+                return;
+            } catch (SecurityException ignored) {
+                // fall through to the inexact path
+            }
+        }
+        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
+    }
+
+    private boolean canExact(AlarmManager am) {
+        if (android.os.Build.VERSION.SDK_INT >= 31) {
+            return am.canScheduleExactAlarms();
+        }
+        return true;
+    }
+
+    private PendingIntent tickIntent(Context ctx) {
+        Intent i = new Intent(ctx, NextClassWidget.class);
+        i.setAction(ACTION_TICK);
+        return PendingIntent.getBroadcast(ctx, 0, i,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 }

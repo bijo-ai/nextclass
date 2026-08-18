@@ -1,27 +1,29 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
+    <!-- rounded-square gradient tile -->
     <path
-        android:fillColor="#F97C5D"
-        android:pathData="M0,0h108v108h-108z" />
-    <path
-        android:fillColor="#FBBF5B"
-        android:pathData="M0,54 L108,0 L108,108 L0,108 z" />
+        android:pathData="M24,2 L84,2 A22,22 0 0 1 106,24 L106,84 A22,22 0 0 1 84,106 L24,106 A22,22 0 0 1 2,84 L2,24 A22,22 0 0 1 24,2 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="10" android:startY="10"
+                android:endX="98" android:endY="98"
+                android:startColor="#F97C5D"
+                android:endColor="#FBBF5B" />
+        </aapt:attr>
+    </path>
 
-    <!-- calendar glyph -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M30,32h48a4,4 0,0 1,4 4v40a4,4 0,0 1,-4 4h-48a4,4 0,0 1,-4 -4v-40a4,4 0,0 1,4 -4z" />
-    <path
-        android:fillColor="#2B2B2B"
-        android:pathData="M30,32h48a4,4 0,0 1,4 4v8h-56v-8a4,4 0,0 1,4 -4z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M38,26h5v12h-5z M65,26h5v12h-5z" />
-    <path
-        android:fillColor="#F97C5D"
-        android:pathData="M36,52h12v10h-12z" />
+    <!-- location pin (your next room), scaled from a 24dp glyph -->
+    <group
+        android:scaleX="3.0" android:scaleY="3.0"
+        android:translateX="18" android:translateY="12">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M12,2C8.13,2 5,5.13 5,9c0,5.25 7,13 7,13s7,-7.75 7,-13c0,-3.87 -3.13,-7 -7,-7zM12,11.5c-1.38,0 -2.5,-1.12 -2.5,-2.5s1.12,-2.5 2.5,-2.5 2.5,1.12 2.5,2.5 -1.12,2.5 -2.5,2.5z" />
+    </group>
 </vector>

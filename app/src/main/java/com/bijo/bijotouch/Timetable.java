@@ -10,7 +10,11 @@ import java.util.List;
 
 /**
  * Read-only logic over the {@link Store}: the day's classes, the nearest events,
- * and the "now / next" the home screen and widget run on.
+ * and the "what now / what next" the home screen and widget run on.
+ *
+ * Two neighbouring slots for the same course + room + type are treated as one
+ * session (LPU runs many classes as two back-to-back periods), so the widget
+ * never previews the subject you're already sitting in.
  */
 public final class Timetable {
 
@@ -19,15 +23,16 @@ public final class Timetable {
     };
 
     /**
-     * Minutes before a class's real end at which it is treated as "over". Kept
-     * at 0 so the widget rolls to the next class exactly when the current one
-     * ends - not early, and not only when the next class starts.
+     * Minutes before a session's end at which the widget stops saying "ongoing"
+     * and starts previewing the next class - a heads-up window to pack up and
+     * move, regardless of how long the class actually is.
      */
-    public static final int EARLY_FLIP = 0;
+    public static final int LEAD_MINUTES = 15;
 
     private Timetable() {
     }
 
+    /** Raw slots for a day, sorted, straight from the store (references, editable). */
     public static List<Slot> forDay(Context ctx, int day) {
         List<Slot> out = new ArrayList<>();
         for (Slot s : Store.get(ctx).slots) {
@@ -41,6 +46,25 @@ public final class Timetable {
                 return Integer.compare(a.startMin, b.startMin);
             }
         });
+        return out;
+    }
+
+    /** Merge contiguous same-course/room/type slots into single sessions (copies). */
+    private static List<Slot> merge(List<Slot> sorted) {
+        List<Slot> out = new ArrayList<>();
+        for (Slot s : sorted) {
+            if (!out.isEmpty()) {
+                Slot last = out.get(out.size() - 1);
+                if (last.course.equals(s.course) && last.room.equals(s.room)
+                        && last.type.equals(s.type) && s.startMin <= last.endMin) {
+                    if (s.endMin > last.endMin) {
+                        last.endMin = s.endMin;
+                    }
+                    continue;
+                }
+            }
+            out.add(new Slot(s.id, s.day, s.startMin, s.endMin, s.type, s.group, s.course, s.room));
+        }
         return out;
     }
 
@@ -87,75 +111,136 @@ public final class Timetable {
 
     // --------------------------------------------------------------- status ---
 
+    public enum State { ONGOING, NEXT, DONE_TODAY, WEEKEND, EMPTY }
+
     public static final class Status {
-        public Slot current;   // class on right now (minus the early flip), or null
-        public Slot next;      // next class, today or a later day
-        public int nextDay;    // day index of `next` when it is on a later day, else 0
-        public boolean weekend;
+        public State state = State.EMPTY;
+        public Slot slot;            // class to show (ongoing or upcoming); null when EMPTY
+        public int nextDay;          // day index when `slot` is on a future day, else 0
+        public int progressPct;      // 0..100, ONGOING only
+        public int minsToStart = -1; // minutes until `slot` starts today, NEXT only
     }
 
     public static Status status(Context ctx) {
-        Store st = Store.get(ctx);
-        int day = todayIndex();
-        int now = nowMinutes();
-
+        Store store = Store.get(ctx);
         Status out = new Status();
-        if (day == 0) {
-            out.weekend = true;
-            fillNextTeachingDay(ctx, st, out, 1);
+        if (store.slots.isEmpty()) {
+            out.state = State.EMPTY;
             return out;
         }
 
-        for (Slot s : forDay(ctx, day)) {
-            if (st.isCancelledToday(s.id)) {
-                continue; // teacher absent - invisible to now/next
+        int day = todayIndex();
+        int now = nowMinutes();
+
+        if (day != 0) {
+            List<Slot> active = new ArrayList<>();
+            for (Slot s : forDay(ctx, day)) {
+                if (!store.isCancelledToday(s.id)) {
+                    active.add(s);
+                }
             }
-            int effectiveEnd = s.endMin - EARLY_FLIP;
-            if (now >= s.startMin && now < effectiveEnd) {
-                out.current = s;
-            } else if (now < s.startMin && out.next == null) {
-                out.next = s;
+            List<Slot> sessions = merge(active);
+
+            Slot current = null;
+            for (Slot s : sessions) {
+                if (now >= s.startMin && now < s.endMin) {
+                    current = s;
+                    break;
+                }
+            }
+
+            if (current != null) {
+                if (now < current.endMin - LEAD_MINUTES) {
+                    out.state = State.ONGOING;
+                    out.slot = current;
+                    out.progressPct = pct(current.startMin, current.endMin, now);
+                    return out;
+                }
+                // final stretch - preview the next session if there is one
+                for (Slot s : sessions) {
+                    if (s.startMin >= current.endMin) {
+                        out.state = State.NEXT;
+                        out.slot = s;
+                        out.minsToStart = s.startMin - now;
+                        return out;
+                    }
+                }
+                // last class of the day, still running: stay ongoing to the bell
+                out.state = State.ONGOING;
+                out.slot = current;
+                out.progressPct = pct(current.startMin, current.endMin, now);
+                return out;
+            }
+
+            // between/before classes - next one today?
+            for (Slot s : sessions) {
+                if (s.startMin > now) {
+                    out.state = State.NEXT;
+                    out.slot = s;
+                    out.minsToStart = s.startMin - now;
+                    return out;
+                }
             }
         }
 
-        if (out.next == null) {
-            fillNextTeachingDay(ctx, st, out, day + 1);
+        // nothing left today: tomorrow (done) or next week (weekend)
+        fillNextTeachingDay(ctx, out, day == 0 ? 1 : day + 1);
+        if (out.slot == null) {
+            out.state = State.EMPTY;
+            return out;
         }
+        out.state = (out.nextDay == 1) ? State.WEEKEND : State.DONE_TODAY;
         return out;
     }
 
-    private static void fillNextTeachingDay(Context ctx, Store st, Status out, int fromDay) {
+    private static void fillNextTeachingDay(Context ctx, Status out, int fromDay) {
         for (int i = 0; i < 7; i++) {
             int d = ((fromDay - 1 + i) % 7) + 1;
             if (d < 1 || d > 5) {
                 continue;
             }
-            for (Slot s : forDay(ctx, d)) {
-                // A future-day cancellation is rare; a plain first class is fine.
-                out.next = s;
+            List<Slot> raw = forDay(ctx, d);
+            if (!raw.isEmpty()) {
+                out.slot = merge(raw).get(0);
                 out.nextDay = d;
                 return;
             }
         }
     }
 
+    private static int pct(int start, int end, int now) {
+        if (end <= start) {
+            return 0;
+        }
+        int p = (now - start) * 100 / (end - start);
+        return Math.max(0, Math.min(100, p));
+    }
+
     // --------------------------------------------------------- widget timing ---
 
     /**
-     * Minutes-since-midnight of the next moment the widget's answer could
-     * change today: any class start, or any class's early-flip point. Used to
-     * schedule the next refresh precisely. Returns -1 if nothing is left today.
+     * Minutes-since-midnight of the next moment the widget's answer could change
+     * today: a session start, its lead point (end - LEAD), or its end. Returns
+     * -1 if nothing is left today.
      */
     public static int nextTransitionToday(Context ctx) {
         int day = todayIndex();
         if (day == 0) {
             return -1;
         }
+        Store store = Store.get(ctx);
         int now = nowMinutes();
-        int best = -1;
+        List<Slot> active = new ArrayList<>();
         for (Slot s : forDay(ctx, day)) {
+            if (!store.isCancelledToday(s.id)) {
+                active.add(s);
+            }
+        }
+        int best = -1;
+        for (Slot s : merge(active)) {
             best = earliestAfter(now, best, s.startMin);
-            best = earliestAfter(now, best, s.endMin - EARLY_FLIP);
+            best = earliestAfter(now, best, s.endMin - LEAD_MINUTES);
+            best = earliestAfter(now, best, s.endMin);
         }
         return best;
     }

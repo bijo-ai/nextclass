@@ -23,6 +23,13 @@ final class Ttime {
         return (min / 60) < 12 ? "AM" : "PM";
     }
 
+    /** A gap as "1h 5m" / "12m". */
+    static String durHuman(int mins) {
+        int h = mins / 60;
+        int m = mins % 60;
+        return h > 0 ? h + "h " + m + "m" : m + "m";
+    }
+
     /**
      * A range the way LPU shows it:
      *   same half of the day -> "09:20 – 10:10 AM"

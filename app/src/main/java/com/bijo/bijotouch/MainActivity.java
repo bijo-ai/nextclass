@@ -8,9 +8,11 @@ import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
 import android.view.View;
+import android.content.res.ColorStateList;
 import android.widget.EditText;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.TimePicker;
@@ -149,56 +151,95 @@ public class MainActivity extends Activity {
         heroBox.removeAllViews();
         Timetable.Status st = Timetable.status(this);
 
+        int[] g = heroGradient(st.state);
         LinearLayout card = Ui.column(this);
-        card.setBackground(Ui.roundedGradient(Ui.ACCENT1, Ui.ACCENT2, 22, this));
+        card.setBackground(Ui.roundedGradient(g[0], g[1], 22, this));
         int p = Ui.dp(this, 20);
         card.setPadding(p, p, p, p);
         card.setLayoutParams(Ui.lp(Ui.MATCH, Ui.WRAP));
 
-        String kicker;
-        Slot show;
-        if (st.current != null) {
-            kicker = "IN CLASS NOW";
-            show = st.current;
-        } else if (st.next != null && st.nextDay == 0) {
-            kicker = "NEXT UP" + minutesAway(st.next);
-            show = st.next;
-        } else if (st.next != null) {
-            kicker = "NEXT · " + Timetable.DAY_NAMES[st.nextDay - 1].toUpperCase();
-            show = st.next;
-        } else {
-            card.addView(Ui.text(this, "No more classes", 22, 0xFFFFFFFF, true));
-            card.addView(Ui.text(this, "Enjoy the break.", 14, 0xFFFFF3EC, false));
-            heroBox.addView(card);
-            return;
+        switch (st.state) {
+            case EMPTY:
+                card.addView(kicker("NO CLASSES YET"));
+                card.addView(headline("Add your week"));
+                card.addView(sub("Tap “+ Add class”, or ≡ to paste a share code."));
+                heroBox.addView(card);
+                return;
+            case WEEKEND:
+                card.addView(kicker("WEEKEND"));
+                card.addView(headline("Weekend plans?? 🎉"));
+                card.addView(sub(Motivation.line()));
+                heroBox.addView(card);
+                return;
+            case DONE_TODAY:
+                card.addView(kicker("DONE FOR TODAY"));
+                card.addView(headline("That’s a wrap ✌️"));
+                card.addView(sub("See you " + Timetable.DAY_NAMES[st.nextDay - 1]
+                        + " · first up " + st.slot.room + " at "
+                        + Ttime.hhmm(st.slot.startMin) + " " + Ttime.period(st.slot.startMin)));
+                heroBox.addView(card);
+                return;
+            default:
+                break; // ONGOING / NEXT below
         }
 
-        TextView k = Ui.text(this, kicker, 12, 0xFFFFF3EC, true);
-        k.setLetterSpacing(0.08f);
-        card.addView(k);
+        Slot show = st.slot;
+        String kick = (st.state == Timetable.State.ONGOING)
+                ? "● ONGOING"
+                : "NEXT UP" + ((st.minsToStart > 0 && st.minsToStart <= 600)
+                        ? "  ·  in " + Ttime.durHuman(st.minsToStart) : "");
+        card.addView(kicker(kick));
 
         TextView room = Ui.text(this, show.room, 40, 0xFFFFFFFF, true);
         room.setPadding(0, Ui.dp(this, 6), 0, 0);
         card.addView(room);
-        card.addView(Ui.text(this, show.roomHuman(), 14, 0xFFFFF3EC, false));
+        card.addView(sub(show.roomHuman()));
 
         TextView line = Ui.text(this,
                 show.course + "  ·  " + show.type + "  ·  " + show.group, 15, 0xFFFFFFFF, true);
         line.setPadding(0, Ui.dp(this, 12), 0, 0);
         card.addView(line);
-        card.addView(Ui.text(this, show.time(), 13, 0xFFFFF3EC, false));
+        card.addView(sub(show.time()));
+
+        if (st.state == Timetable.State.ONGOING) {
+            ProgressBar bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+            bar.setMax(100);
+            bar.setProgress(st.progressPct);
+            bar.setProgressTintList(ColorStateList.valueOf(0xFFFFFFFF));
+            bar.setProgressBackgroundTintList(ColorStateList.valueOf(0x55FFFFFF));
+            LinearLayout.LayoutParams blp = Ui.lp(Ui.MATCH, Ui.dp(this, 6));
+            blp.topMargin = Ui.dp(this, 14);
+            bar.setLayoutParams(blp);
+            card.addView(bar);
+        }
 
         heroBox.addView(card);
     }
 
-    private String minutesAway(Slot next) {
-        int diff = next.startMin - Timetable.nowMinutes();
-        if (diff <= 0 || diff > 600) {
-            return "";
+    private int[] heroGradient(Timetable.State state) {
+        switch (state) {
+            case ONGOING:    return new int[]{0xFF17B26A, 0xFF067647};
+            case DONE_TODAY: return new int[]{0xFF3B82F6, 0xFF6366F1};
+            case WEEKEND:    return new int[]{0xFF7C3AED, 0xFFDB2777};
+            case EMPTY:      return new int[]{0xFF6B7280, 0xFF4B5563};
+            default:         return new int[]{Ui.ACCENT1, Ui.ACCENT2};
         }
-        int h = diff / 60;
-        int m = diff % 60;
-        return h > 0 ? "  ·  in " + h + "h " + m + "m" : "  ·  in " + m + "m";
+    }
+
+    private TextView kicker(String s) {
+        TextView k = Ui.text(this, s, 12, 0xFFFFF3EC, true);
+        k.setLetterSpacing(0.08f);
+        return k;
+    }
+
+    private TextView headline(String s) {
+        TextView t = Ui.text(this, s, 26, 0xFFFFFFFF, true);
+        t.setPadding(0, Ui.dp(this, 6), 0, 0);
+        return t;
+    }
+
+    private TextView sub(String s) {
+        return Ui.text(this, s, 14, 0xFFFFF3EC, false);
     }
 
     // -------------------------------------------------------------- events ---
