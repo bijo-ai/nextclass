@@ -111,14 +111,15 @@ public final class Timetable {
 
     // --------------------------------------------------------------- status ---
 
-    public enum State { ONGOING, NEXT, DONE_TODAY, WEEKEND, EMPTY }
+    public enum State { ONGOING, NEXT, FREE_NOW, DONE_TODAY, WEEKEND, EMPTY }
 
     public static final class Status {
         public State state = State.EMPTY;
         public Slot slot;            // class to show (ongoing or upcoming); null when EMPTY
         public int nextDay;          // day index when `slot` is on a future day, else 0
         public int progressPct;      // 0..100, ONGOING only
-        public int minsToStart = -1; // minutes until `slot` starts today, NEXT only
+        public int minsToStart = -1; // minutes until `slot` starts today, NEXT/FREE_NOW only
+        public String cancelledCourse; // the subject that's off, FREE_NOW only
     }
 
     public static Status status(Context ctx) {
@@ -169,6 +170,28 @@ public final class Timetable {
                 out.state = State.ONGOING;
                 out.slot = current;
                 out.progressPct = pct(current.startMin, current.endMin, now);
+                return out;
+            }
+
+            // teacher on leave: now sits inside a class you cancelled today
+            Slot cancelledNow = null;
+            for (Slot s : forDay(ctx, day)) {
+                if (store.isCancelledToday(s.id) && now >= s.startMin && now < s.endMin) {
+                    cancelledNow = s;
+                    break;
+                }
+            }
+            if (cancelledNow != null) {
+                out.state = State.FREE_NOW;
+                out.cancelledCourse = cancelledNow.course;
+                for (Slot s : sessions) {
+                    if (s.startMin > now) {
+                        out.slot = s;
+                        out.minsToStart = s.startMin - now;
+                        return out;
+                    }
+                }
+                fillNextTeachingDay(ctx, out, day + 1); // nothing else today
                 return out;
             }
 
@@ -231,16 +254,18 @@ public final class Timetable {
         Store store = Store.get(ctx);
         int now = nowMinutes();
         List<Slot> active = new ArrayList<>();
+        int best = -1;
+        // Every raw start/end is a boundary (a cancelled slot's edges flip the
+        // free state on and off); active sessions add the lead-time flip point.
         for (Slot s : forDay(ctx, day)) {
+            best = earliestAfter(now, best, s.startMin);
+            best = earliestAfter(now, best, s.endMin);
             if (!store.isCancelledToday(s.id)) {
                 active.add(s);
             }
         }
-        int best = -1;
         for (Slot s : merge(active)) {
-            best = earliestAfter(now, best, s.startMin);
             best = earliestAfter(now, best, s.endMin - LEAD_MINUTES);
-            best = earliestAfter(now, best, s.endMin);
         }
         return best;
     }

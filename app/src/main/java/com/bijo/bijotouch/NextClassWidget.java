@@ -96,6 +96,19 @@ public class NextClassWidget extends AppWidgetProvider {
                 detail = st.slot.course + " · " + st.slot.type;
                 time = st.slot.time();
                 break;
+            case FREE_NOW:
+                bg = R.drawable.widget_bg_free;
+                kicker = "TEACHER ON LEAVE";
+                room = "Free period 🎉";
+                detail = st.cancelledCourse + " cancelled";
+                if (st.slot != null && st.nextDay == 0 && st.minsToStart > 0) {
+                    time = "Free for " + Ttime.durHuman(st.minsToStart) + " · next " + st.slot.room;
+                } else if (st.slot != null) {
+                    time = "Next class " + Timetable.DAY_NAMES[st.nextDay - 1];
+                } else {
+                    time = "No more classes today 🎉";
+                }
+                break;
             case DONE_TODAY:
                 bg = R.drawable.widget_bg_done;
                 kicker = "DONE FOR TODAY";

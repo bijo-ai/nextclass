@@ -171,6 +171,24 @@ public class MainActivity extends Activity {
                 card.addView(sub(Motivation.line()));
                 heroBox.addView(card);
                 return;
+            case FREE_NOW:
+                card.addView(kicker("TEACHER ON LEAVE"));
+                card.addView(headline("Free period 🎉"));
+                card.addView(sub(st.cancelledCourse + " is cancelled today"));
+                String when;
+                if (st.slot != null && st.nextDay == 0 && st.minsToStart > 0) {
+                    when = "Free for " + Ttime.durHuman(st.minsToStart)
+                            + "  ·  next " + st.slot.room + " (" + st.slot.course + ")";
+                } else if (st.slot != null) {
+                    when = "Next class " + Timetable.DAY_NAMES[st.nextDay - 1];
+                } else {
+                    when = "No more classes today 🎉";
+                }
+                TextView w = sub(when);
+                w.setPadding(0, Ui.dp(this, 10), 0, 0);
+                card.addView(w);
+                heroBox.addView(card);
+                return;
             case DONE_TODAY:
                 card.addView(kicker("DONE FOR TODAY"));
                 card.addView(headline("That’s a wrap ✌️"));
@@ -219,6 +237,7 @@ public class MainActivity extends Activity {
     private int[] heroGradient(Timetable.State state) {
         switch (state) {
             case ONGOING:    return new int[]{0xFF17B26A, 0xFF067647};
+            case FREE_NOW:   return new int[]{0xFF2DD4BF, 0xFF0891B2};
             case DONE_TODAY: return new int[]{0xFF3B82F6, 0xFF6366F1};
             case WEEKEND:    return new int[]{0xFF7C3AED, 0xFFDB2777};
             case EMPTY:      return new int[]{0xFF6B7280, 0xFF4B5563};
