@@ -1,0 +1,30 @@
+# Built files
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+bin/
+gen/
+out/
+release/
+
+# Gradle
+.gradle/
+build/
+app/build/
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+.navigation/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Machine-specific — never commit these
+local.properties
+
+# OS cruft
+.DS_Store
+Thumbs.db
