@@ -13,10 +13,13 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
-/** Calendar of the things that actually matter: CAs, assignments, exams. */
+/** Calendar of the things that matter - CAs, assignments, exams - grouped by course. */
 public class EventsActivity extends Activity {
 
     private LinearLayout list;
@@ -76,47 +79,85 @@ public class EventsActivity extends Activity {
             return;
         }
 
-        for (final Event e : up) {
-            LinearLayout row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setBackground(Ui.rounded(Ui.CARD, 16, this));
-            int rp = Ui.dp(this, 14);
-            row.setPadding(rp, rp, rp, rp);
-            LinearLayout.LayoutParams rl = Ui.lp(Ui.MATCH, Ui.WRAP);
-            rl.bottomMargin = Ui.dp(this, 10);
-            row.setLayoutParams(rl);
-
-            TextView tag = Ui.text(this, e.kind, 11, 0xFFFFFFFF, true);
-            tag.setBackground(Ui.rounded(MainActivity.kindColor(e.kind), 8, this));
-            int tp = Ui.dp(this, 8);
-            tag.setPadding(tp, Ui.dp(this, 5), tp, Ui.dp(this, 5));
-            row.addView(tag);
-
-            LinearLayout col = Ui.column(this);
-            LinearLayout.LayoutParams cl = Ui.lp(0, Ui.WRAP);
-            cl.weight = 1;
-            cl.leftMargin = Ui.dp(this, 12);
-            col.setLayoutParams(cl);
-            col.addView(Ui.text(this, e.title, 16, Ui.INK, true));
-            col.addView(Ui.text(this, e.dateHuman() + "  ·  " + e.awayHuman()
-                    + (e.note.isEmpty() ? "" : "  ·  " + e.note), 12, Ui.MUTED, false));
-            row.addView(col);
-
-            TextView del = Ui.text(this, "✕", 18, Ui.MUTED, true);
-            int dp = Ui.dp(this, 8);
-            del.setPadding(dp, dp, dp, dp);
-            del.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    Store.get(EventsActivity.this).deleteEvent(e.id);
-                    rebuild();
-                }
-            });
-            row.addView(del);
-
-            list.addView(row);
+        // Group by course, soonest-deadline course first (up is date-sorted).
+        Map<String, List<Event>> groups = new LinkedHashMap<>();
+        for (Event e : up) {
+            List<Event> g = groups.get(e.course);
+            if (g == null) {
+                g = new ArrayList<>();
+                groups.put(e.course, g);
+            }
+            g.add(e);
         }
+        for (Map.Entry<String, List<Event>> en : groups.entrySet()) {
+            list.addView(groupHeader(en.getKey()));
+            for (Event e : en.getValue()) {
+                list.addView(eventRow(e));
+            }
+        }
+    }
+
+    private View groupHeader(String course) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams rl = Ui.lp(Ui.MATCH, Ui.WRAP);
+        rl.topMargin = Ui.dp(this, 18);
+        rl.bottomMargin = Ui.dp(this, 8);
+        row.setLayoutParams(rl);
+
+        View dot = new View(this);
+        dot.setBackground(Ui.rounded(Courses.color(course), 5, this));
+        LinearLayout.LayoutParams dl = Ui.lp(Ui.dp(this, 10), Ui.dp(this, 10));
+        dl.rightMargin = Ui.dp(this, 8);
+        dot.setLayoutParams(dl);
+        row.addView(dot);
+
+        TextView t = Ui.text(this, course.toUpperCase(), 13, Ui.INK, true);
+        t.setLetterSpacing(0.04f);
+        row.addView(t);
+        return row;
+    }
+
+    private View eventRow(final Event e) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setBackground(Ui.rounded(Ui.CARD, 16, this));
+        int rp = Ui.dp(this, 14);
+        row.setPadding(rp, rp, rp, rp);
+        LinearLayout.LayoutParams rl = Ui.lp(Ui.MATCH, Ui.WRAP);
+        rl.bottomMargin = Ui.dp(this, 10);
+        row.setLayoutParams(rl);
+
+        TextView tag = Ui.text(this, e.kind, 11, 0xFFFFFFFF, true);
+        tag.setBackground(Ui.rounded(MainActivity.kindColor(e.kind), 8, this));
+        int tp = Ui.dp(this, 8);
+        tag.setPadding(tp, Ui.dp(this, 5), tp, Ui.dp(this, 5));
+        row.addView(tag);
+
+        LinearLayout col = Ui.column(this);
+        LinearLayout.LayoutParams cl = Ui.lp(0, Ui.WRAP);
+        cl.weight = 1;
+        cl.leftMargin = Ui.dp(this, 12);
+        col.setLayoutParams(cl);
+        col.addView(Ui.text(this, e.title, 16, Ui.INK, true));
+        col.addView(Ui.text(this, e.dateHuman() + "  ·  " + e.awayHuman()
+                + (e.note.isEmpty() ? "" : "  ·  " + e.note), 12, Ui.MUTED, false));
+        row.addView(col);
+
+        TextView del = Ui.text(this, "✕", 18, Ui.MUTED, true);
+        int dp = Ui.dp(this, 8);
+        del.setPadding(dp, dp, dp, dp);
+        del.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                Store.get(EventsActivity.this).deleteEvent(e.id);
+                rebuild();
+            }
+        });
+        row.addView(del);
+        return row;
     }
 
     private void addDialog() {
@@ -133,6 +174,31 @@ public class EventsActivity extends Activity {
         titleIn.setSingleLine(true);
         titleIn.setTextColor(Ui.INK);
         form.addView(titleIn);
+
+        // Course: the codes in the timetable, plus a catch-all "General".
+        final List<String> cc = Courses.codes(this);
+        final String[] courseOpts = new String[cc.size() + 1];
+        for (int i = 0; i < cc.size(); i++) {
+            courseOpts[i] = cc.get(i);
+        }
+        courseOpts[cc.size()] = Event.GENERAL;
+        final int[] courseIdx = {courseOpts.length == 1 ? 0 : 0}; // first course, or General
+        form.addView(label("Course"));
+        final TextView coursePick = pickerField(courseOpts[courseIdx[0]]);
+        coursePick.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                new AlertDialog.Builder(EventsActivity.this)
+                        .setItems(courseOpts, new android.content.DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(android.content.DialogInterface d, int which) {
+                                courseIdx[0] = which;
+                                coursePick.setText(courseOpts[which]);
+                            }
+                        }).show();
+            }
+        });
+        form.addView(coursePick);
 
         final int[] kindIdx = {0};
         form.addView(label("Type"));
@@ -194,7 +260,7 @@ public class EventsActivity extends Activity {
                         store.addEvent(new Event(store.newId(), t, Event.KINDS[kindIdx[0]],
                                 picked.get(Calendar.YEAR), picked.get(Calendar.MONTH) + 1,
                                 picked.get(Calendar.DAY_OF_MONTH),
-                                noteIn.getText().toString().trim()));
+                                noteIn.getText().toString().trim(), courseOpts[courseIdx[0]]));
                         rebuild();
                     }
                 })

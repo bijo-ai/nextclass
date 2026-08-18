@@ -144,7 +144,8 @@ public class NextClassWidget extends AppWidgetProvider {
         // Nearest deadline as a chip, if any.
         Event e = Timetable.nextEvent(ctx);
         if (e != null) {
-            v.setTextViewText(R.id.w_event, e.kind + ": " + e.title + " · " + e.awayHuman());
+            String pre = e.course.equals(Event.GENERAL) ? "" : e.course + " · ";
+            v.setTextViewText(R.id.w_event, pre + e.kind + ": " + e.title + " · " + e.awayHuman());
             v.setViewVisibility(R.id.w_event, View.VISIBLE);
         } else {
             v.setViewVisibility(R.id.w_event, View.GONE);

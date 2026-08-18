@@ -122,7 +122,7 @@ public final class Store {
                     events.add(new Event(
                             o.getLong("id"), o.getString("title"), o.getString("kind"),
                             o.getInt("year"), o.getInt("month"), o.getInt("dom"),
-                            o.optString("note", "")));
+                            o.optString("note", ""), o.optString("course", Event.GENERAL)));
                 }
             }
 
@@ -172,6 +172,7 @@ public final class Store {
                 o.put("month", ev.month);
                 o.put("dom", ev.dom);
                 o.put("note", ev.note);
+                o.put("course", ev.course);
                 e.put(o);
             }
             root.put("events", e);

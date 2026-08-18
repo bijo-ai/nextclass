@@ -43,7 +43,9 @@ public class AboutActivity extends Activity {
 
         root.addView(Ui.text(this, "NextClass", 28, Ui.INK, true));
         TextView tag = Ui.text(this,
-                "Your timetable & next class — fully offline. Touches no LPU server.",
+                "Your timetable & next class. Your data stays on your phone — the only "
+                        + "time it uses the internet is to check GitHub for app updates. "
+                        + "Never touches any LPU server.",
                 13, Ui.MUTED, false);
         tag.setPadding(0, Ui.dp(this, 4), 0, 0);
         root.addView(tag);

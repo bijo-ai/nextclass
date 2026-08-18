@@ -8,6 +8,9 @@ public final class Event {
 
     public static final String[] KINDS = {"CA", "Assignment", "Quiz", "Exam", "Other"};
 
+    /** Shown in the course picker for events not tied to a subject. */
+    public static final String GENERAL = "General";
+
     public long id;
     public String title;   // "DSA Unit 2"
     public String kind;    // one of KINDS
@@ -15,8 +18,10 @@ public final class Event {
     public int month;      // 1..12
     public int dom;        // day of month
     public String note;    // optional
+    public String course;  // a course code from the timetable, or GENERAL
 
-    public Event(long id, String title, String kind, int year, int month, int dom, String note) {
+    public Event(long id, String title, String kind, int year, int month, int dom,
+                 String note, String course) {
         this.id = id;
         this.title = title;
         this.kind = kind;
@@ -24,6 +29,7 @@ public final class Event {
         this.month = month;
         this.dom = dom;
         this.note = note;
+        this.course = (course == null || course.isEmpty()) ? GENERAL : course;
     }
 
     /** Midnight of the event day, for sorting and "days away" maths. */

@@ -24,6 +24,7 @@ import java.util.List;
  */
 public class MainActivity extends Activity {
 
+    private LinearLayout updateBox;
     private LinearLayout heroBox;
     private LinearLayout eventsBox;
     private LinearLayout dayRow;
@@ -74,6 +75,10 @@ public class MainActivity extends Activity {
         titleRow.addView(menuButton());
         root.addView(titleRow);
 
+        // ---- update banner (hidden unless a newer version is known) ----
+        updateBox = Ui.column(this);
+        root.addView(updateBox);
+
         // ---- hero ----
         heroBox = Ui.column(this);
         LinearLayout.LayoutParams hl = Ui.lp(Ui.MATCH, Ui.WRAP);
@@ -120,6 +125,13 @@ public class MainActivity extends Activity {
 
         setContentView(scroll);
         refresh();
+
+        UpdateChecker.check(this, new UpdateChecker.Listener() {
+            @Override
+            public void onChanged() {
+                showUpdateBanner();
+            }
+        });
     }
 
     @Override
@@ -137,12 +149,75 @@ public class MainActivity extends Activity {
     }
 
     private void refresh() {
+        showUpdateBanner();
         buildHero();
         buildEvents();
         buildTabs();
         showDay(selectedDay);
         // Keep the widget in step with edits made here.
         NextClassWidget.refresh(this);
+    }
+
+    // -------------------------------------------------------- update banner ---
+
+    private void showUpdateBanner() {
+        if (updateBox == null) {
+            return;
+        }
+        updateBox.removeAllViews();
+        if (!UpdateChecker.updateAvailable(this)) {
+            updateBox.setVisibility(View.GONE);
+            return;
+        }
+        updateBox.setVisibility(View.VISIBLE);
+        final String ver = UpdateChecker.latestVersion(this);
+        final String url = UpdateChecker.latestUrl(this);
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setBackground(Ui.rounded(0xFF1E293B, 14, this));
+        int p = Ui.dp(this, 14);
+        row.setPadding(p, p, p, p);
+        LinearLayout.LayoutParams rl = Ui.lp(Ui.MATCH, Ui.WRAP);
+        rl.topMargin = Ui.dp(this, 14);
+        row.setLayoutParams(rl);
+
+        LinearLayout col = Ui.column(this);
+        LinearLayout.LayoutParams cl = Ui.lp(0, Ui.WRAP);
+        cl.weight = 1;
+        col.setLayoutParams(cl);
+        col.addView(Ui.text(this, "⬆  Update available (v" + ver + ")", 14, 0xFFFFFFFF, true));
+        col.addView(Ui.text(this, "Tap to download the new version", 12, 0xFFB8C0CC, false));
+        row.addView(col);
+
+        TextView x = Ui.text(this, "✕", 16, 0xFFB8C0CC, true);
+        int xp = Ui.dp(this, 8);
+        x.setPadding(xp, xp, xp, xp);
+        x.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                UpdateChecker.dismiss(MainActivity.this);
+                showUpdateBanner();
+            }
+        });
+        row.addView(x);
+
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                openUrl(url.isEmpty()
+                        ? "https://github.com/bijo-ai/nextclass/releases" : url);
+            }
+        });
+        updateBox.addView(row);
+    }
+
+    private void openUrl(String url) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)));
+        } catch (Exception ignored) {
+        }
     }
 
     // ---------------------------------------------------------------- hero ---
@@ -299,7 +374,8 @@ public class MainActivity extends Activity {
             cl.leftMargin = Ui.dp(this, 12);
             col.setLayoutParams(cl);
             col.addView(Ui.text(this, e.title, 15, Ui.INK, true));
-            col.addView(Ui.text(this, e.dateHuman() + "  ·  " + e.awayHuman()
+            String coursePrefix = e.course.equals(Event.GENERAL) ? "" : e.course + "  ·  ";
+            col.addView(Ui.text(this, coursePrefix + e.dateHuman() + "  ·  " + e.awayHuman()
                     + (e.note.isEmpty() ? "" : "  ·  " + e.note), 12, Ui.MUTED, false));
             row.addView(col);
 
@@ -311,6 +387,15 @@ public class MainActivity extends Activity {
             });
             eventsBox.addView(row);
         }
+    }
+
+    private Event nearestEventForCourse(String course) {
+        for (Event e : Timetable.upcomingEvents(this)) {
+            if (e.course.equals(course)) {
+                return e;
+            }
+        }
+        return null;
     }
 
     static int kindColor(String kind) {
@@ -435,6 +520,15 @@ public class MainActivity extends Activity {
             TextView badge = Ui.text(this, "● happening now", 12, Ui.GREEN, true);
             badge.setPadding(0, Ui.dp(this, 8), 0, 0);
             body.addView(badge);
+        }
+
+        Event due = nearestEventForCourse(s.course);
+        if (due != null) {
+            TextView d = Ui.text(this,
+                    "📌 " + due.kind + " · " + due.title + " · " + due.awayHuman(),
+                    12, Courses.color(s.course), true);
+            d.setPadding(0, Ui.dp(this, 8), 0, 0);
+            body.addView(d);
         }
 
         card.addView(body);
