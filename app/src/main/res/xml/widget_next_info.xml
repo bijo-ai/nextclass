@@ -4,7 +4,7 @@
     android:label="@string/widget_label"
     android:minHeight="110dp"
     android:minWidth="180dp"
-    android:previewImage="@drawable/ic_launcher"
+    android:previewImage="@mipmap/ic_launcher"
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="1800000"
     android:widgetCategory="home_screen" />

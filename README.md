@@ -1,4 +1,8 @@
-# NextClass
+<p align="center">
+  <img src="docs/logo.png" width="120" alt="NextClass logo">
+</p>
+
+<h1 align="center">NextClass</h1>
 
 **Your college timetable and next-class room, right on your home screen. Fully offline.**
 
