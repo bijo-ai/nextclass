@@ -412,7 +412,7 @@ public class MainActivity extends Activity {
 
     private void buildTabs() {
         dayRow.removeAllViews();
-        for (int d = 1; d <= 5; d++) {
+        for (int d = 1; d <= 7; d++) {
             dayRow.addView(buildTab(d));
         }
     }

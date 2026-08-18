@@ -19,7 +19,7 @@ import java.util.List;
 public final class Timetable {
 
     public static final String[] DAY_NAMES = {
-            "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"
+            "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
     };
 
     /**
@@ -76,7 +76,9 @@ public final class Timetable {
             case Calendar.WEDNESDAY: return 3;
             case Calendar.THURSDAY:  return 4;
             case Calendar.FRIDAY:    return 5;
-            default:                 return 0;
+            case Calendar.SATURDAY:  return 6;
+            case Calendar.SUNDAY:    return 7;
+            default:                 return 1;
         }
     }
 
@@ -206,22 +208,23 @@ public final class Timetable {
             }
         }
 
-        // nothing left today: tomorrow (done) or next week (weekend)
-        fillNextTeachingDay(ctx, out, day == 0 ? 1 : day + 1);
+        // nothing left today: next class tomorrow (done) or 2+ days off (weekend/break)
+        fillNextTeachingDay(ctx, out, day + 1);
         if (out.slot == null) {
             out.state = State.EMPTY;
             return out;
         }
-        out.state = (out.nextDay == 1) ? State.WEEKEND : State.DONE_TODAY;
+        int gap = ((out.nextDay - day) % 7 + 7) % 7;
+        if (gap == 0) {
+            gap = 7; // only today has classes - a whole week until the next
+        }
+        out.state = (gap >= 2) ? State.WEEKEND : State.DONE_TODAY;
         return out;
     }
 
     private static void fillNextTeachingDay(Context ctx, Status out, int fromDay) {
         for (int i = 0; i < 7; i++) {
             int d = ((fromDay - 1 + i) % 7) + 1;
-            if (d < 1 || d > 5) {
-                continue;
-            }
             List<Slot> raw = forDay(ctx, d);
             if (!raw.isEmpty()) {
                 out.slot = merge(raw).get(0);
